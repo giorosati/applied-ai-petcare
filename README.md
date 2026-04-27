@@ -2,6 +2,14 @@
 
 PawPal+ is a full-stack Python application that helps pet owners build and manage a daily care schedule for their pets. It combines a priority-based task scheduler with a Retrieval-Augmented Generation (RAG) AI that answers pet care questions using a curated knowledge base and the owner's live schedule data.
 
+**GitHub:** https://github.com/giorosati/applied-ai-petcare
+
+**Loom walkthrough:** *(add link after recording)*
+
+## About Me as an AI Engineer
+
+This project shows that I approach AI as an engineering discipline, not just a feature to bolt on. I built a Retrieval-Augmented Generation system from scratch, made deliberate architectural decisions about where AI adds value versus where deterministic logic is more reliable, and backed every component with automated tests. When things broke — rate limits, deprecated APIs, widget state bugs — I diagnosed and fixed them rather than working around them. I care about building software that is understandable and auditable, which is why logging, error handling, and a clean separation between the AI layer and the scheduling logic were priorities from the start. This is the kind of engineer I want to be: someone who can ship working AI systems and explain exactly how and why they work.
+
 ## Architecture Overview
 
 ![System Diagram](assets/system_diagram.png)

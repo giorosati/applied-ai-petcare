@@ -158,7 +158,11 @@ class Scheduler:
         """
         budget = self.owner.available_minutes_per_day
 
-        daily_tasks = [t for t in self.owner.get_all_tasks() if t.frequency == "daily"]
+        daily_tasks = [
+            t for t in self.owner.get_all_tasks()
+            if t.frequency == "daily"
+            and (t.due_date is None or t.due_date <= date.today())
+        ]
         candidates  = sorted(
             daily_tasks,
             key=lambda t: (-int(t.required), int(t.completion_status), -t.priority),
@@ -176,7 +180,7 @@ class Scheduler:
                 scheduled_ids.add(task.id)
                 total_time += task.duration_minutes
 
-        skipped = [t for t in daily_tasks if t.id not in scheduled_ids]
+        skipped = [t for t in daily_tasks if t.id not in scheduled_ids and not t.completion_status]
         return plan, skipped
 
     def apply_constraints(self):

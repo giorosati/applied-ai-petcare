@@ -288,12 +288,18 @@ if st.button("Generate schedule"):
         scheduler = st.session_state.scheduler
         scheduled, skipped = scheduler.generate_plan()
 
-        if scheduled:
-            sorted_tasks = scheduler.sort_by_time(scheduled)
-            total_min = sum(t.duration_minutes for t in sorted_tasks)
+        completed_daily = [
+            t for t in st.session_state.owner.get_all_tasks()
+            if t.frequency == "daily" and t.completion_status
+            and (t.due_date is None or t.due_date == date.today())
+        ]
+        all_display = scheduler.sort_by_time(scheduled + completed_daily)
+
+        if scheduled or completed_daily:
+            total_min = sum(t.duration_minutes for t in scheduled)
             budget_used = st.session_state.owner.available_minutes_per_day
             st.success(
-                f"{len(sorted_tasks)} task(s) scheduled — "
+                f"{len(scheduled)} task(s) scheduled — "
                 f"{total_min} of {budget_used} minutes used."
             )
             task_to_pet = {
@@ -311,8 +317,9 @@ if st.button("Generate schedule"):
                         "Duration (min)": t.duration_minutes,
                         "Priority": t.priority,
                         "Required": "Yes" if t.required else "No",
+                        "Done": "✓" if t.completion_status else "",
                     }
-                    for t in sorted_tasks
+                    for t in all_display
                 ]
             )
         else:
