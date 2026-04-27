@@ -98,7 +98,7 @@ col3, col4 = st.columns(2)
 with col3:
     pet_name = st.text_input("Pet name", value="Mochi")
 with col4:
-    species = st.selectbox("Species", ["dog", "cat", "other"])
+    species = st.selectbox("Species", ["dog", "cat"])
 
 if st.button("Create Pet"):
     existing_names = [p.name for p in st.session_state.owner.pets] if st.session_state.owner else []

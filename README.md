@@ -176,11 +176,13 @@ The suite contains 49 tests organized into five areas:
 - **Conflict detection** — overlapping tasks produce `CONFLICT` strings; adjacent (non-overlapping) tasks do not; tasks missing `start_time` produce `WARNING` strings; a clean schedule returns an empty list.
 - **Edge cases** — pet with no tasks, zero-budget owner, task duration exactly equal to budget, duplicate task IDs across pets, and cache invalidation after mutations.
 
-### Confidence Level
+### Results
 
-★★★★★ (5/5)
+49 out of 49 tests pass across all components. The scheduler, conflict detection, recurrence logic, and edge cases are fully covered by 45 unit tests. Four dedicated RAG engine tests confirm that the retriever returns relevant knowledge chunks for real pet care queries, returns an empty result when no match exists, and assembles the AI prompt with all required sections. No test failures were observed; the only gap is UI-layer behavior, which is evaluated manually.
 
-All 49 tests pass. Core scheduling, recurrence, sorting, conflict detection, task management, and RAG retrieval are all covered.
+### Logging and error handling
+
+Every AI query is logged to `pawpal_rag.log` with the question text, number of chunks retrieved, cosine similarity scores for each chunk, and the final token counts (input and output) from the Gemini API. During development, two rate limit errors were caught and surfaced as plain-language messages rather than stack traces, which led to switching models to find a quota tier that worked reliably. Authentication errors, rate limits, and connection failures each produce a distinct user-facing message. The log provides a complete audit trail of what the AI retrieved and how much context it was given for every response.
 
 ### Demo
 
@@ -240,6 +242,26 @@ This project reinforced that complex systems are built incrementally, not design
 
 ---
 
+## Responsible AI
+
+### Limitations and biases
+
+The knowledge base contains 24 hand-curated chunks covering common dog and cat care topics. This scope means the AI has limited coverage for exotic pets, specific breeds, senior or chronically ill animals, and regional differences in veterinary practice. The TF-IDF retriever matches on word overlap, so a question phrased very differently from the knowledge base may pull in a less relevant chunk and produce a less accurate answer. Most critically, the AI gives generic advice — it does not know Blue's age, breed, or health history, so recommendations like exercise duration or vaccination schedules should always be verified with a veterinarian rather than followed directly. Due to these limitations the app is currently limted to allowing only dogs and cats.
+
+### Potential for misuse
+
+The most likely misuse is treating the AI's responses as a substitute for professional veterinary care. A pet owner facing a health emergency might ask the AI instead of calling a vet. To reduce this risk, the system prompt instructs the AI to recommend consulting a veterinarian for health and medication questions, and the knowledge base chunks are grounded in factual care guidelines rather than allowing free-form medical diagnosis. A future improvement would add a persistent disclaimer banner in the UI on any response that mentions health, medication, or emergency symptoms.
+
+### What surprised me during testing
+
+The most unexpected result was how effectively the AI personalized its responses using the injected pet context. During testing, the AI addressed the owner by name, referenced the pet's name naturally, and noted existing scheduled tasks to avoid suggesting duplicates — without any explicit instruction to do so beyond the context string passed in the prompt. The second surprise was how quickly rate limits became a real constraint during development. The system had to switch models twice before finding a quota tier that worked reliably for interactive use, which was a practical reminder that AI APIs are external dependencies with their own constraints, not just function calls.
+
+### Collaboration with AI during this project
+
+Claude Code was used throughout this project as a development assistant. One instance where the AI gave a genuinely helpful suggestion was recommending TF-IDF vectorization over a vector database for the retriever. The reasoning — no model downloads, no external services, fully offline, fast startup — was sound and directly shaped the final architecture. One instance where the AI's suggestion was incorrect was replacing Streamlit's deprecated `use_container_width=True` parameter with `width="100%"`. That value is not valid in Streamlit; the correct replacement is `width="stretch"`. The error only surfaced at runtime when the app failed to load, which was a useful reminder that AI-generated code suggestions should always be tested rather than trusted without verification.
+
+---
+
 ## Setup Instructions
 
 Follow these steps to run PawPal+ on your machine.
@@ -252,7 +274,7 @@ Follow these steps to run PawPal+ on your machine.
 ### 2. Clone the repository
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/giorosati/applied-ai-petcare.git
 cd applied-ai-petcare
 ```
 
