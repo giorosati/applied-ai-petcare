@@ -1,5 +1,76 @@
+import logging
+import os
+
 import streamlit as st
+from dotenv import load_dotenv
+
+from knowledge_base import PET_CARE_KNOWLEDGE
 from pawpal_system import Owner, Pet, Task, Scheduler
+from rag_engine import RAGEngine
+
+load_dotenv()
+
+
+def _setup_logging() -> None:
+    root = logging.getLogger()
+    if root.handlers:
+        return
+    root.setLevel(logging.INFO)
+    fmt = logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s")
+    fh = logging.FileHandler("pawpal_rag.log")
+    fh.setFormatter(fmt)
+    root.addHandler(fh)
+
+
+_setup_logging()
+
+
+@st.cache_resource
+def get_rag_engine() -> RAGEngine:
+    return RAGEngine(PET_CARE_KNOWLEDGE)
+
+
+def build_pet_context(owner: Owner | None, scheduler) -> str:
+    """Build a plain-text summary of the owner's pets and tasks for the AI prompt."""
+    if owner is None:
+        return "No owner or pets have been set up yet."
+
+    lines = [
+        f"Owner: {owner.name}",
+        f"Daily time budget: {owner.available_minutes_per_day} minutes",
+    ]
+
+    for pet in owner.pets:
+        lines.append(f"\nPet: {pet.name} ({pet.species})")
+        incomplete = [t for t in pet.tasks if not t.completion_status]
+        done_count = sum(1 for t in pet.tasks if t.completion_status)
+
+        if incomplete:
+            for t in incomplete:
+                time_str = f" | starts {t.start_time}" if t.start_time else ""
+                lines.append(
+                    f"  - {t.description} | {t.frequency} | {t.duration_minutes} min"
+                    f" | priority {t.priority}"
+                    f" | {'required' if t.required else 'optional'}{time_str}"
+                )
+        else:
+            lines.append("  - No active tasks scheduled")
+
+        if done_count:
+            lines.append(f"  ({done_count} task(s) already completed today)")
+
+    if scheduler:
+        scheduled, skipped = scheduler.generate_plan()
+        total = sum(t.duration_minutes for t in scheduled)
+        lines.append(
+            f"\nScheduled today: {len(scheduled)} task(s) using"
+            f" {total}/{owner.available_minutes_per_day} minutes"
+        )
+        if skipped:
+            skipped_names = ", ".join(t.description for t in skipped)
+            lines.append(f"Skipped (over budget): {skipped_names}")
+
+    return "\n".join(lines)
 
 # Session state init
 if 'owner' not in st.session_state:
@@ -53,7 +124,7 @@ if st.button("Create Pet"):
 if st.session_state.owner:
     st.dataframe(
         [{"Name": p.name, "Species": p.species} for p in st.session_state.owner.pets],
-        use_container_width=True,
+        width="100%",
     )
 
 st.divider()
@@ -123,14 +194,18 @@ if st.session_state.scheduler:
                 }
                 for t in all_tasks
             ],
-            use_container_width=True,
+            width="100%",
         )
 
-        incomplete_ids = [t.id for t in all_tasks if not t.completion_status]
-        if incomplete_ids:
-            complete_id = st.selectbox("Mark task complete", incomplete_ids)
+        incomplete_tasks = [t for t in all_tasks if not t.completion_status]
+        if incomplete_tasks:
+            selected_task = st.selectbox(
+                "Mark task complete",
+                incomplete_tasks,
+                format_func=lambda t: t.description,
+            )
             if st.button("Mark complete"):
-                next_task = st.session_state.scheduler.mark_task_complete(complete_id)
+                next_task = st.session_state.scheduler.mark_task_complete(selected_task.id)
                 if next_task:
                     st.success(f"Done! Next occurrence scheduled for {next_task.due_date}.")
                 else:
@@ -250,3 +325,60 @@ if st.button("Generate schedule"):
                 )
         if not conflicts and not notices:
             st.success("No conflicts detected — your schedule looks good!")
+
+st.divider()
+
+# ── Ask PawPal AI ──────────────────────────────────────────────────────────────
+st.subheader("Ask PawPal AI")
+st.caption(
+    "Ask any pet care question. The AI retrieves relevant knowledge and personalizes "
+    "its answer using your actual pets and current schedule."
+)
+
+_api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+
+if not _api_key:
+    st.warning(
+        "**ANTHROPIC_API_KEY not set.** Create a `.env` file in the project root:\n\n"
+        "```\nANTHROPIC_API_KEY=your_key_here\n```\n\n"
+        "Get a free key at [console.anthropic.com](https://console.anthropic.com)."
+    )
+else:
+    ai_question = st.text_input(
+        "Ask PawPal AI",
+        placeholder="e.g. How much exercise does my dog need? What tasks should I add for my cat?",
+        label_visibility="collapsed",
+    )
+
+    if st.button("Ask AI", disabled=not bool(ai_question.strip())):
+        rag = get_rag_engine()
+        pet_context = build_pet_context(
+            st.session_state.get("owner"),
+            st.session_state.get("scheduler"),
+        )
+
+        retrieved_chunks = rag.retrieve(ai_question)
+
+        with st.expander("Knowledge sources retrieved", expanded=False):
+            if retrieved_chunks:
+                for chunk in retrieved_chunks:
+                    colon = chunk.find(":")
+                    topic = chunk[:colon] if colon > 0 else "Tip"
+                    preview = chunk[colon + 1:].strip()[:130] if colon > 0 else chunk[:130]
+                    st.markdown(f"**{topic}** — {preview}…")
+            else:
+                st.write("No closely matching entries found in the knowledge base.")
+
+        st.markdown("**PawPal AI:**")
+        response_container = st.empty()
+        full_response = ""
+
+        try:
+            for token in rag.stream_answer(
+                ai_question, pet_context, _api_key, retrieved_chunks
+            ):
+                full_response += token
+                response_container.markdown(full_response + "▌")
+            response_container.markdown(full_response)
+        except ValueError as exc:
+            response_container.error(str(exc))

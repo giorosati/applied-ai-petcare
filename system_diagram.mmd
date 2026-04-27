@@ -1,0 +1,54 @@
+flowchart TD
+    User(["👤 Pet Owner"])
+
+    subgraph UI["Streamlit UI  •  app.py"]
+        Input["Question input\n+ pet/task forms"]
+        Output["Streaming AI answer\n+ schedule view\n+ conflict warnings"]
+    end
+
+    subgraph Retriever["Retriever  •  rag_engine.py + knowledge_base.py"]
+        KB["Knowledge Base\n24 pet care chunks"]
+        TFIDF["TF-IDF Vectorizer\n+ Cosine Similarity"]
+        Chunks["Top-3 relevant chunks"]
+        KB --> TFIDF --> Chunks
+    end
+
+    subgraph Agent["AI Agent  •  rag_engine.py"]
+        Builder["Prompt Builder\nknowledge + pet context"]
+        Claude["Claude claude-opus-4-7\nStreaming API"]
+        Builder --> Claude
+    end
+
+    subgraph Scheduler["Scheduler  •  pawpal_system.py"]
+        Plan["Plan Generator\npriority + time budget"]
+        Conflict["Conflict Detector\ntime overlap check"]
+    end
+
+    subgraph Evaluation["Evaluation & Testing"]
+        PyTest["🧪 pytest\nautomated test suite"]
+        HumanReview["👤 Human Review\nAI answer quality"]
+        Log["📋 pawpal_rag.log\ntoken counts + scores"]
+    end
+
+    User -->|"asks question\nadds pets & tasks"| Input
+    Input -->|"query"| TFIDF
+    Input -->|"owner + tasks"| Plan
+    Plan -->|"scheduled tasks\nskipped tasks"| Builder
+    Conflict -->|"overlap warnings"| Output
+    Plan --> Conflict
+    Chunks -->|"retrieved facts"| Builder
+    Claude -->|"streamed tokens"| Output
+    Claude -->|"logs usage"| Log
+    TFIDF -->|"retrieval scores"| Log
+    Output -->|"reads response"| User
+
+    PyTest -->|"tests Retriever\nScheduler + Agent"| Retriever
+    PyTest -->|"tests Scheduler\nlogic"| Scheduler
+    HumanReview -->|"validates\nAI responses"| Agent
+
+    style User fill:#f0f4ff,stroke:#4a6cf7
+    style Evaluation fill:#fff8e1,stroke:#f9a825
+    style UI fill:#e8f5e9,stroke:#43a047
+    style Retriever fill:#e3f2fd,stroke:#1e88e5
+    style Agent fill:#fce4ec,stroke:#e53935
+    style Scheduler fill:#f3e5f5,stroke:#8e24aa
