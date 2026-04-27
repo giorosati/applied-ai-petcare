@@ -124,7 +124,7 @@ if st.button("Create Pet"):
 if st.session_state.owner:
     st.dataframe(
         [{"Name": p.name, "Species": p.species} for p in st.session_state.owner.pets],
-        width="100%",
+        width="stretch",
     )
 
 st.divider()
@@ -194,7 +194,7 @@ if st.session_state.scheduler:
                 }
                 for t in all_tasks
             ],
-            width="100%",
+            width="stretch",
         )
 
         incomplete_tasks = [t for t in all_tasks if not t.completion_status]
@@ -335,13 +335,13 @@ st.caption(
     "its answer using your actual pets and current schedule."
 )
 
-_api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+_api_key = os.environ.get("GEMINI_API_KEY", "").strip()
 
 if not _api_key:
     st.warning(
-        "**ANTHROPIC_API_KEY not set.** Create a `.env` file in the project root:\n\n"
-        "```\nANTHROPIC_API_KEY=your_key_here\n```\n\n"
-        "Get a free key at [console.anthropic.com](https://console.anthropic.com)."
+        "**GEMINI_API_KEY not set.** Create a `.env` file in the project root:\n\n"
+        "```\nGEMINI_API_KEY=your_key_here\n```\n\n"
+        "Get a key at [aistudio.google.com](https://aistudio.google.com)."
     )
 else:
     ai_question = st.text_input(

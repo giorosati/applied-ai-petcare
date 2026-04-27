@@ -1,11 +1,12 @@
 import logging
 from typing import Generator, List, Optional
 
-import anthropic
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+from google import genai
+from google.genai import types
 
 _logger = logging.getLogger(__name__)
+
+MODEL = "gemini-2.5-flash-lite"
 
 SYSTEM_PROMPT = (
     "You are PawPal+, an expert pet care assistant integrated into a daily scheduling app. "
@@ -29,7 +30,7 @@ class RAGEngine:
     Builds a TF-IDF index over a knowledge base of pet care chunks at
     construction time, then retrieves the most relevant chunks for each
     query and passes them — together with the owner's live pet data — to
-    Claude to produce a personalized answer.
+    Gemini to produce a personalized answer.
     """
 
     def __init__(self, chunks: List[str]) -> None:
@@ -38,6 +39,7 @@ class RAGEngine:
         _logger.info("RAG index built with %d knowledge chunks", len(chunks))
 
     def _build_index(self) -> None:
+        from sklearn.feature_extraction.text import TfidfVectorizer
         self.vectorizer = TfidfVectorizer(
             stop_words="english",
             ngram_range=(1, 2),
@@ -47,6 +49,7 @@ class RAGEngine:
 
     def retrieve(self, query: str, top_k: int = 3) -> List[str]:
         """Return the top-k most relevant knowledge chunks for *query*."""
+        from sklearn.metrics.pairwise import cosine_similarity
         try:
             query_vec = self.vectorizer.transform([query])
             scores = cosine_similarity(query_vec, self.tfidf_matrix)[0]
@@ -89,96 +92,80 @@ class RAGEngine:
         api_key: str,
         retrieved_chunks: Optional[List[str]] = None,
     ) -> Generator[str, None, None]:
-        """Stream an answer token-by-token.
-
-        Retrieves relevant knowledge (or uses *retrieved_chunks* if already
-        fetched), builds the prompt with the owner's live pet data, and
-        yields text tokens from the Claude API as they arrive.
-        """
+        """Stream an answer token-by-token using the Gemini API."""
         if retrieved_chunks is None:
             retrieved_chunks = self.retrieve(question)
 
         user_message = self._build_user_message(question, pet_context, retrieved_chunks)
-        _logger.info("Starting streamed Claude call | question='%s'", question[:60])
+        _logger.info("Starting streamed Gemini call | question='%s'", question[:60])
 
         try:
-            client = anthropic.Anthropic(api_key=api_key)
-            with client.messages.stream(
-                model="claude-opus-4-7",
-                max_tokens=1024,
-                system=[
-                    {
-                        "type": "text",
-                        "text": SYSTEM_PROMPT,
-                        "cache_control": {"type": "ephemeral"},
-                    }
-                ],
-                messages=[{"role": "user", "content": user_message}],
-            ) as stream:
-                for text in stream.text_stream:
-                    yield text
-                final = stream.get_final_message()
+            client = genai.Client(api_key=api_key)
+            response_stream = client.models.generate_content_stream(
+                model=MODEL,
+                contents=user_message,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    max_output_tokens=1024,
+                ),
+            )
+            last_chunk = None
+            for chunk in response_stream:
+                last_chunk = chunk
+                if chunk.text:
+                    yield chunk.text
+            if last_chunk and last_chunk.usage_metadata:
                 _logger.info(
-                    "Stream complete | input=%d | output=%d | cache_read=%d",
-                    final.usage.input_tokens,
-                    final.usage.output_tokens,
-                    final.usage.cache_read_input_tokens,
+                    "Stream complete | input=%d | output=%d",
+                    last_chunk.usage_metadata.prompt_token_count or 0,
+                    last_chunk.usage_metadata.candidates_token_count or 0,
                 )
-        except anthropic.AuthenticationError:
-            _logger.error("Invalid ANTHROPIC_API_KEY")
-            raise ValueError(
-                "Invalid API key. Check your ANTHROPIC_API_KEY in the .env file."
-            )
-        except anthropic.RateLimitError:
-            _logger.error("Claude API rate limit exceeded")
-            raise ValueError("API rate limit exceeded. Please wait a moment and try again.")
-        except anthropic.APIConnectionError:
-            _logger.error("Cannot connect to Claude API")
-            raise ValueError(
-                "Cannot connect to AI service. Check your internet connection."
-            )
         except Exception as exc:
-            _logger.error("Unexpected Claude API error: %s", exc)
-            raise ValueError(f"AI service error: {exc}")
+            _logger.error("Gemini API error: %s", exc)
+            msg = str(exc)
+            if any(k in msg for k in ("API_KEY", "UNAUTHENTICATED", "PERMISSION_DENIED")):
+                raise ValueError(
+                    "Invalid API key. Check your GEMINI_API_KEY in the .env file."
+                )
+            elif "RESOURCE_EXHAUSTED" in msg or "quota" in msg.lower():
+                raise ValueError("API rate limit exceeded. Please wait a moment and try again.")
+            elif "connect" in msg.lower() or "network" in msg.lower():
+                raise ValueError(
+                    "Cannot connect to AI service. Check your internet connection."
+                )
+            else:
+                raise ValueError(f"AI service error: {exc}")
 
     def answer(self, question: str, pet_context: str, api_key: str) -> str:
         """Return a complete (non-streaming) answer — useful for automated tests."""
         retrieved = self.retrieve(question)
         user_message = self._build_user_message(question, pet_context, retrieved)
-        _logger.info("Starting non-streamed Claude call | question='%s'", question[:60])
+        _logger.info("Starting non-streamed Gemini call | question='%s'", question[:60])
 
         try:
-            client = anthropic.Anthropic(api_key=api_key)
-            with client.messages.stream(
-                model="claude-opus-4-7",
-                max_tokens=1024,
-                system=[
-                    {
-                        "type": "text",
-                        "text": SYSTEM_PROMPT,
-                        "cache_control": {"type": "ephemeral"},
-                    }
-                ],
-                messages=[{"role": "user", "content": user_message}],
-            ) as stream:
-                final = stream.get_final_message()
-
-            text = next((b.text for b in final.content if b.type == "text"), "")
+            client = genai.Client(api_key=api_key)
+            response = client.models.generate_content(
+                model=MODEL,
+                contents=user_message,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    max_output_tokens=1024,
+                ),
+            )
             _logger.info(
                 "Answer complete | input=%d | output=%d",
-                final.usage.input_tokens,
-                final.usage.output_tokens,
+                response.usage_metadata.prompt_token_count or 0,
+                response.usage_metadata.candidates_token_count or 0,
             )
-            return text
-        except anthropic.AuthenticationError:
-            _logger.error("Invalid ANTHROPIC_API_KEY")
-            raise ValueError("Invalid API key. Check your ANTHROPIC_API_KEY.")
-        except anthropic.RateLimitError:
-            _logger.error("Rate limit exceeded")
-            raise ValueError("Rate limit exceeded. Please wait and try again.")
-        except anthropic.APIConnectionError:
-            _logger.error("Connection error")
-            raise ValueError("Cannot connect to AI service.")
+            return response.text
         except Exception as exc:
-            _logger.error("API error: %s", exc)
-            raise ValueError(f"AI service error: {exc}")
+            _logger.error("Gemini API error: %s", exc)
+            msg = str(exc)
+            if any(k in msg for k in ("API_KEY", "UNAUTHENTICATED", "PERMISSION_DENIED")):
+                raise ValueError("Invalid API key. Check your GEMINI_API_KEY.")
+            elif "RESOURCE_EXHAUSTED" in msg or "quota" in msg.lower():
+                raise ValueError("Rate limit exceeded. Please wait and try again.")
+            elif "connect" in msg.lower():
+                raise ValueError("Cannot connect to AI service.")
+            else:
+                raise ValueError(f"AI service error: {exc}")
