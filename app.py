@@ -1,5 +1,6 @@
 import logging
 import os
+from datetime import date
 
 import streamlit as st
 from dotenv import load_dotenv
@@ -171,6 +172,7 @@ if st.button("Add task"):
             frequency=frequency,
             completion_status=False,
             start_time=start_time,
+            due_date=date.today(),
         )
         st.session_state.scheduler.add_task(task, assign_to)
         st.success(f"'{task_title}' added for {assign_to}!")
@@ -210,12 +212,20 @@ if st.session_state.scheduler:
                     st.success(f"Done! Next occurrence scheduled for {next_task.due_date}.")
                 else:
                     st.success("Task marked complete.")
+                st.rerun()
 
         if st.button("Edit a task" if not st.session_state.show_edit else "Close editor"):
             st.session_state.show_edit = not st.session_state.show_edit
 
         if st.session_state.show_edit:
-            edit_id = st.selectbox("Select task to edit", [t.id for t in all_tasks], key="edit_select")
+            edit_id = st.selectbox(
+                "Select task to edit",
+                [t.id for t in all_tasks],
+                format_func=lambda tid: next(
+                    (t.description for t in all_tasks if t.id == tid), tid
+                ),
+                key="edit_select",
+            )
             task_to_edit = next(t for t in all_tasks if t.id == edit_id)
 
             priority_reverse = {1: "low", 3: "medium", 5: "high"}
@@ -251,7 +261,7 @@ if st.session_state.scheduler:
                 task_to_edit.frequency = e_frequency
                 task_to_edit.start_time = e_start.strip() if e_start.strip() else None
                 st.session_state.scheduler._invalidate_cache()
-                st.success(f"Task '{e_title}' updated!")
+                st.session_state.show_edit = False
                 st.rerun()
     else:
         st.info("No tasks yet. Add one above.")
