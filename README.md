@@ -6,7 +6,8 @@ PawPal+ is a full-stack Python application that helps pet owners build and manag
 
 **GitHub:** https://github.com/giorosati/applied-ai-petcare
 
-**Loom walkthrough:** https://www.loom.com/share/78fd31c34b2440e799ca69b58ca48702
+**Loom walkthrough:** https://www.loom.com/share/5b8f031fcbe045869f5908f8a87e77ee
+
 
 ## About Me as an AI Engineer
 
