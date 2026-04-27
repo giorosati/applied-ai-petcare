@@ -2,6 +2,8 @@
 
 PawPal+ is a full-stack Python application that helps pet owners build and manage a daily care schedule for their pets. It combines a priority-based task scheduler with a Retrieval-Augmented Generation (RAG) AI that answers pet care questions using a curated knowledge base and the owner's live schedule data.
 
+*Built as an extension of the Module 2 PawPal+ scheduling project for the CodePath Applied AI course.*
+
 **GitHub:** https://github.com/giorosati/applied-ai-petcare
 
 **Loom walkthrough:** https://www.loom.com/share/78fd31c34b2440e799ca69b58ca48702
@@ -194,7 +196,7 @@ Every AI query is logged to `pawpal_rag.log` with the question text, number of c
 
 ### Demo
 
-![PawPal App](pawpal_app.png)
+![PawPal App](assets/pawpal_app.png)
 
 ---
 
