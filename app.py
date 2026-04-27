@@ -187,6 +187,7 @@ if st.session_state.scheduler:
                 {
                     "Task": t.description,
                     "Pet": next((p.name for p in st.session_state.owner.pets if t in p.tasks), "—"),
+                    "Due Date": t.due_date.strftime("%b %d, %Y") if t.due_date else "—",
                     "Duration (min)": t.duration_minutes,
                     "Priority": t.priority,
                     "Required": "Yes" if t.required else "No",
@@ -204,7 +205,10 @@ if st.session_state.scheduler:
             selected_task = st.selectbox(
                 "Mark task complete",
                 incomplete_tasks,
-                format_func=lambda t: t.description,
+                format_func=lambda t: (
+                    f"{t.description} — {t.due_date.strftime('%b %d, %Y')}"
+                    if t.due_date else t.description
+                ),
             )
             if st.button("Mark complete"):
                 next_task = st.session_state.scheduler.mark_task_complete(selected_task.id)
@@ -216,13 +220,19 @@ if st.session_state.scheduler:
 
         if st.button("Edit a task" if not st.session_state.show_edit else "Close editor"):
             st.session_state.show_edit = not st.session_state.show_edit
+            st.rerun()
 
         if st.session_state.show_edit:
             edit_id = st.selectbox(
                 "Select task to edit",
                 [t.id for t in all_tasks],
                 format_func=lambda tid: next(
-                    (t.description for t in all_tasks if t.id == tid), tid
+                    (
+                        f"{t.description} — {t.due_date.strftime('%b %d, %Y')}"
+                        if t.due_date else t.description
+                        for t in all_tasks if t.id == tid
+                    ),
+                    tid,
                 ),
                 key="edit_select",
             )
@@ -231,26 +241,26 @@ if st.session_state.scheduler:
             priority_reverse = {1: "low", 3: "medium", 5: "high"}
             e_col1, e_col2, e_col3 = st.columns(3)
             with e_col1:
-                e_title = st.text_input("Title", value=task_to_edit.description, key="e_title")
+                e_title = st.text_input("Title", value=task_to_edit.description, key=f"e_title_{edit_id}")
             with e_col2:
                 e_duration = st.number_input("Duration (min)", min_value=1, max_value=240,
-                                             value=task_to_edit.duration_minutes, key="e_duration")
+                                             value=task_to_edit.duration_minutes, key=f"e_duration_{edit_id}")
             with e_col3:
                 e_priority = st.selectbox("Priority", ["low", "medium", "high"],
                                           index=["low", "medium", "high"].index(
                                               priority_reverse.get(task_to_edit.priority, "medium")
-                                          ), key="e_priority")
+                                          ), key=f"e_priority_{edit_id}")
 
             e_col4, e_col5, e_col6 = st.columns(3)
             with e_col4:
-                e_required = st.checkbox("Required?", value=task_to_edit.required, key="e_required")
+                e_required = st.checkbox("Required?", value=task_to_edit.required, key=f"e_required_{edit_id}")
             with e_col5:
                 e_frequency = st.selectbox("Frequency", ["daily", "weekly", "once"],
                                            index=["daily", "weekly", "once"].index(task_to_edit.frequency),
-                                           key="e_frequency")
+                                           key=f"e_frequency_{edit_id}")
             with e_col6:
                 e_start = st.text_input("Start time (HH:MM)", value=task_to_edit.start_time or "",
-                                        key="e_start")
+                                        key=f"e_start_{edit_id}")
 
             if st.button("Save changes"):
                 priority_map = {"low": 1, "medium": 3, "high": 5}
@@ -294,6 +304,7 @@ if st.button("Generate schedule"):
             st.table(
                 [
                     {
+                        "Date": t.due_date.strftime("%b %d, %Y") if t.due_date else "—",
                         "Time": t.start_time or "—",
                         "Task": t.description,
                         "Pet": task_to_pet.get(t.id, "—"),
