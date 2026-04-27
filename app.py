@@ -90,13 +90,13 @@ st.subheader("Owner & Pet Setup")
 
 col1, col2 = st.columns(2)
 with col1:
-    owner_name = st.text_input("Owner name", value="Jordan")
+    owner_name = st.text_input("Owner name")
 with col2:
     budget = st.slider("Daily time budget (minutes)", min_value=30, max_value=480, value=120, step=15)
 
 col3, col4 = st.columns(2)
 with col3:
-    pet_name = st.text_input("Pet name", value="Mochi")
+    pet_name = st.text_input("Pet name")
 with col4:
     species = st.selectbox("Species", ["dog", "cat"])
 
@@ -135,7 +135,7 @@ st.subheader("Add Task")
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    task_title = st.text_input("Task title", value="Morning walk")
+    task_title = st.text_input("Task title")
 with col2:
     duration = st.number_input("Duration (minutes)", min_value=1, max_value=240, value=20)
 with col3:
